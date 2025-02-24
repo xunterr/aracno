@@ -33,11 +33,13 @@ type Worker struct {
 	in  chan resource
 	out chan result
 
-	warcWriter *warc.WarcWriter
-	mu         sync.Mutex
+	warcWriter  *warc.WarcWriter
+	mu          sync.Mutex
+	maxPageSize int
 }
 
 var ErrCrawlForbidden error = errors.New("Crawl forbidden")
+var ErrTooBig error = errors.New("File is too big")
 
 func (w *Worker) runN(ctx context.Context, wg *sync.WaitGroup, n int) {
 	for i := 0; i < n; i++ {
@@ -92,6 +94,20 @@ func (w *Worker) waitAndProcess(ctx context.Context, res resource) result {
 }
 
 func (w *Worker) process(ctx context.Context, res resource) result {
+	headRes, err := w.fetcher.Head(res.u)
+	if err != nil {
+		return result{
+			err: err,
+			url: res.u,
+		}
+	}
+	defer headRes.Body.Close()
+	if headRes.ContentLength > int64(w.maxPageSize) {
+		return result{
+			err: ErrTooBig,
+			url: res.u,
+		}
+	}
 	details, err := w.fetcher.Fetch(res.u)
 	if err != nil {
 		return result{

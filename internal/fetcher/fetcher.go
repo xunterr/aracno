@@ -15,6 +15,7 @@ type FetchDetails struct {
 
 type Fetcher interface {
 	Fetch(*url.URL) (*FetchDetails, error)
+	Head(*url.URL) (*http.Response, error)
 }
 
 type DefaultFetcher struct {
@@ -57,6 +58,14 @@ func (df *DefaultFetcher) Fetch(url *url.URL) (*FetchDetails, error) {
 		Body: bytes,
 		TTR:  ttr,
 	}, nil
+}
+
+func (df *DefaultFetcher) Head(url *url.URL) (*http.Response, error) {
+	req, e := http.NewRequest("HEAD", url.String(), nil)
+	if e != nil {
+		return nil, e
+	}
+	return df.client.Do(req)
 }
 
 func (df *DefaultFetcher) setHeaders(req *http.Request) {

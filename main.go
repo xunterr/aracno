@@ -316,7 +316,7 @@ func loop(logger *zap.SugaredLogger, frontier frontier.Frontier, fet fetcher.Fet
 			total.Inc()
 			if r.err != nil {
 				if r.err != ErrCrawlForbidden {
-					logger.Errorf("Error processing url: %s", r.err)
+					logger.Errorf("Error processing url: %s - %s", r.url, r.err)
 				}
 				frontier.MarkFailed(r.url)
 				continue
@@ -336,10 +336,11 @@ func loop(logger *zap.SugaredLogger, frontier frontier.Frontier, fet fetcher.Fet
 	warcWriter := warc.NewWarcWriter("data/warc/")
 
 	worker := &Worker{
-		fetcher:    fet,
-		in:         urls,
-		out:        processed,
-		warcWriter: warcWriter,
+		fetcher:     fet,
+		in:          urls,
+		out:         processed,
+		warcWriter:  warcWriter,
+		maxPageSize: 100 * 1024 * 1024,
 	}
 	worker.runN(context.Background(), &wg, 512)
 

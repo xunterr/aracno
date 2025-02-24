@@ -139,9 +139,6 @@ func main() {
 		logger.Fatalln(err)
 	}
 
-	t := time.Duration(conf.Fetcher.TimeoutMs) * time.Millisecond
-	println(t.String())
-
 	http.Handle("/metrics", promhttp.Handler())
 	go func() {
 		logger.Fatalln(http.ListenAndServe(":8080", nil))
@@ -318,7 +315,11 @@ func loop(logger *zap.SugaredLogger, frontier frontier.Frontier, fet fetcher.Fet
 				if r.err != ErrCrawlForbidden {
 					logger.Errorf("Error processing url: %s - %s", r.url, r.err)
 				}
-				frontier.MarkFailed(r.url)
+				if _, isReqErr := r.err.(*RequestError); isReqErr {
+					frontier.MarkFailed(r.url)
+				} else {
+					frontier.MarkProcessed(r.url)
+				}
 				continue
 			}
 

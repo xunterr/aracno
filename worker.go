@@ -27,6 +27,14 @@ type result struct {
 	links []*url.URL
 }
 
+type RequestError struct {
+	Err error
+}
+
+func (re *RequestError) Error() string {
+	return re.Err.Error()
+}
+
 type Worker struct {
 	fetcher fetcher.Fetcher
 
@@ -56,13 +64,9 @@ func (w *Worker) run(ctx context.Context) {
 		select {
 		case r := <-w.in:
 			can, err := w.canCrawl(r.u)
-			if err == nil && !can {
-				err = ErrCrawlForbidden
-			}
-
-			if err != nil {
+			if err != nil || !can {
 				w.out <- result{
-					err: err,
+					err: ErrCrawlForbidden,
 					url: r.u,
 				}
 				break
@@ -97,7 +101,7 @@ func (w *Worker) process(ctx context.Context, res resource) result {
 	headRes, err := w.fetcher.Head(res.u)
 	if err != nil {
 		return result{
-			err: err,
+			err: &RequestError{Err: err},
 			url: res.u,
 		}
 	}
@@ -111,7 +115,7 @@ func (w *Worker) process(ctx context.Context, res resource) result {
 	details, err := w.fetcher.Fetch(res.u)
 	if err != nil {
 		return result{
-			err: err,
+			err: &RequestError{Err: err},
 			url: res.u,
 		}
 	}

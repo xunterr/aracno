@@ -101,6 +101,10 @@ func (d *DistributedFrontier) MarkFailed(u *url.URL) error {
 	return d.frontier.MarkFailed(u)
 }
 
+func (d *DistributedFrontier) MarkProcessed(u *url.URL) error {
+	return d.frontier.MarkProcessed(u)
+}
+
 func (d *DistributedFrontier) Put(u *url.URL) error {
 	succ, err := d.dht.FindSuccessor(d.dht.MakeKey([]byte(toId(u))))
 	if err != nil {

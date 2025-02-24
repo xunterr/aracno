@@ -14,6 +14,7 @@ import (
 
 type Frontier interface {
 	Get() (*url.URL, time.Time, error)
+	MarkProcessed(*url.URL) error
 	MarkSuccessful(*url.URL, time.Duration) error
 	MarkFailed(*url.URL) error
 	Put(*url.URL) error
@@ -261,14 +262,14 @@ func (f *BfFrontier) MarkSuccessful(url *url.URL, ttr time.Duration) error {
 	f.responseTime[toId(url)] = ttr
 	f.rtMu.Unlock()
 
-	return f.markProcessed(url)
+	return f.MarkProcessed(url)
 }
 
 func (f *BfFrontier) MarkFailed(url *url.URL) error {
-	return f.markProcessed(url)
+	return f.MarkProcessed(url)
 }
 
-func (f *BfFrontier) markProcessed(url *url.URL) error {
+func (f *BfFrontier) MarkProcessed(url *url.URL) error {
 	id := toId(url)
 	f.qmMu.Lock()
 	queue, ok := f.queueMap[id]

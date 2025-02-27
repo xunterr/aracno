@@ -12,6 +12,8 @@ import (
 	warcparser "github.com/slyrz/warc"
 	"github.com/xunterr/aracno/internal/fetcher"
 	"github.com/xunterr/aracno/internal/parser"
+	"github.com/xunterr/aracno/internal/storage"
+	"github.com/xunterr/aracno/internal/storage/inmem"
 	"github.com/xunterr/aracno/internal/warc"
 )
 
@@ -41,8 +43,11 @@ type Worker struct {
 	in  chan resource
 	out chan result
 
+	robotsCache *inmem.LruCache[string]
+	rcMu        sync.Mutex
+
 	warcWriter  *warc.WarcWriter
-	mu          sync.Mutex
+	wwMu        sync.Mutex
 	maxPageSize int
 }
 
@@ -63,20 +68,37 @@ func (w *Worker) run(ctx context.Context) {
 	for {
 		select {
 		case r := <-w.in:
-			can, err := w.canCrawl(r.u)
-			if err != nil || !can {
+			if err := w.filter(r.u); err != nil {
+				println(err.Error())
 				w.out <- result{
-					err: ErrCrawlForbidden,
+					err: err,
 					url: r.u,
 				}
 				break
 			}
-
 			w.out <- w.waitAndProcess(ctx, r)
 		case <-ctx.Done():
 			return
 		}
 	}
+}
+
+func (w *Worker) filter(url *url.URL) error {
+	can, err := w.canCrawl(url)
+	if err != nil || !can {
+		return ErrCrawlForbidden
+	}
+
+	headRes, err := w.fetcher.Head(url)
+	if err != nil {
+		return &RequestError{Err: err}
+	}
+	defer headRes.Body.Close()
+
+	if headRes.ContentLength > int64(w.maxPageSize) {
+		return ErrTooBig
+	}
+	return nil
 }
 
 func (w *Worker) waitAndProcess(ctx context.Context, res resource) result {
@@ -98,20 +120,6 @@ func (w *Worker) waitAndProcess(ctx context.Context, res resource) result {
 }
 
 func (w *Worker) process(ctx context.Context, res resource) result {
-	headRes, err := w.fetcher.Head(res.u)
-	if err != nil {
-		return result{
-			err: &RequestError{Err: err},
-			url: res.u,
-		}
-	}
-	defer headRes.Body.Close()
-	if headRes.ContentLength > int64(w.maxPageSize) {
-		return result{
-			err: ErrTooBig,
-			url: res.u,
-		}
-	}
 	details, err := w.fetcher.Fetch(res.u)
 	if err != nil {
 		return result{
@@ -129,9 +137,9 @@ func (w *Worker) process(ctx context.Context, res resource) result {
 		}
 	}
 
-	w.mu.Lock()
+	w.wwMu.Lock()
 	err = writeWarc(w.warcWriter, res.u, details)
-	w.mu.Unlock()
+	w.wwMu.Unlock()
 
 	return result{
 		err:   err,
@@ -142,18 +150,50 @@ func (w *Worker) process(ctx context.Context, res resource) result {
 }
 
 func (w *Worker) canCrawl(res *url.URL) (bool, error) {
-	robotsUrl := *res
-	robotsUrl.Path = "/robots.txt"
-	robotsUrl.RawQuery = ""
-	robotsUrl.Fragment = ""
-
-	details, err := w.fetcher.Fetch(&robotsUrl)
+	body, err := w.getRobots(res)
 	if err != nil {
 		return false, err
 	}
 
-	ok := grobotstxt.AgentAllowed(string(details.Body), "GoBot/1.0", res.String())
+	ok := grobotstxt.AgentAllowed(body, "GoBot/1.0", res.String())
 	return ok, nil
+}
+
+func (w *Worker) getRobots(url *url.URL) (string, error) {
+	w.rcMu.Lock()
+	body, err := w.robotsCache.Get(url.Hostname())
+	w.rcMu.Unlock()
+	if err == nil {
+		return body, nil
+	}
+
+	if err != storage.NoSuchKeyError {
+		return "", err
+	}
+
+	details, err := w.fetchRobots(url)
+	if err != nil {
+		return "", err
+	}
+
+	body = string(details.Body)
+
+	w.rcMu.Lock()
+	err = w.robotsCache.Put(url.Hostname(), body)
+	w.rcMu.Unlock()
+	if err != nil {
+		return "", err
+	}
+	return body, nil
+}
+
+func (w *Worker) fetchRobots(url *url.URL) (*fetcher.FetchDetails, error) {
+	robotsUrl := *url
+	robotsUrl.Path = "/robots.txt"
+	robotsUrl.RawQuery = ""
+	robotsUrl.Fragment = ""
+
+	return w.fetcher.Fetch(&robotsUrl)
 }
 
 func writeWarc(writer *warc.WarcWriter, url *url.URL, details *fetcher.FetchDetails) error {

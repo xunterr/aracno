@@ -342,6 +342,7 @@ func loop(logger *zap.SugaredLogger, frontier frontier.Frontier, fet fetcher.Fet
 		out:         processed,
 		warcWriter:  warcWriter,
 		maxPageSize: 100 * 1024 * 1024,
+		robotsCache: inmem.NewLruCache[string](64),
 	}
 	worker.runN(context.Background(), &wg, 512)
 

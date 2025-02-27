@@ -42,3 +42,39 @@ func (s *InMemoryStorage[V]) Delete(key string) error {
 	s.storeMu.Unlock()
 	return nil
 }
+
+type SlidingStorage[V any] struct {
+	storage storage.Storage[V]
+	cache   *LruCache[V]
+}
+
+func NewSlidingStorage[V any](storage storage.Storage[V], windowSize uint) *SlidingStorage[V] {
+	cache := NewLruCache[V](windowSize)
+
+	cache.SetOnEvict(func(k string, v V) {
+		storage.Put(k, v)
+	})
+
+	return &SlidingStorage[V]{
+		storage: storage,
+		cache:   cache,
+	}
+
+}
+
+func (s *SlidingStorage[V]) Get(key string) (V, error) {
+	if val, err := s.cache.Get(key); err == nil {
+		return val, nil
+	} else {
+		return s.storage.Get(key)
+	}
+}
+
+func (s *SlidingStorage[V]) Put(key string, val V) error {
+	return s.cache.Put(key, val)
+}
+
+func (s *SlidingStorage[V]) Delete(key string) error {
+	s.cache.Delete(key)
+	return s.storage.Delete(key)
+}

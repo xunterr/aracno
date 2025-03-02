@@ -3,6 +3,7 @@ package filter
 import (
 	"net/url"
 	"regexp"
+	"sync"
 
 	"github.com/jimsmart/grobotstxt"
 	"github.com/xunterr/aracno/internal/fetcher"
@@ -46,6 +47,7 @@ func NewRegexFilter(regex string) FilterFunc {
 
 type robotsFilter struct {
 	fetcher fetcher.Fetcher
+	mu      sync.Mutex
 	cache   *inmem.LruCache[string]
 }
 
@@ -69,7 +71,9 @@ func (rf *robotsFilter) canCrawl(res *url.URL) (bool, error) {
 }
 
 func (rf *robotsFilter) getRobots(url *url.URL) (string, error) {
+	rf.mu.Lock()
 	body, err := rf.cache.Get(url.Hostname())
+	rf.mu.Unlock()
 	if err == nil {
 		return body, nil
 	}
@@ -85,7 +89,9 @@ func (rf *robotsFilter) getRobots(url *url.URL) (string, error) {
 
 	body = string(details.Body)
 
+	rf.mu.Lock()
 	err = rf.cache.Put(url.Hostname(), body)
+	rf.mu.Unlock()
 	if err != nil {
 		return "", err
 	}

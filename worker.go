@@ -10,6 +10,7 @@ import (
 
 	warcparser "github.com/slyrz/warc"
 	"github.com/xunterr/aracno/internal/fetcher"
+	"github.com/xunterr/aracno/internal/filter"
 	"github.com/xunterr/aracno/internal/parser"
 	"github.com/xunterr/aracno/internal/warc"
 )
@@ -43,6 +44,8 @@ type Worker struct {
 	warcWriter  *warc.WarcWriter
 	wwMu        sync.Mutex
 	maxPageSize int
+
+	filterChain *filter.FilterChain
 }
 
 var ErrCrawlForbidden error = errors.New("Crawl forbidden")
@@ -77,6 +80,14 @@ func (w *Worker) run(ctx context.Context) {
 }
 
 func (w *Worker) filter(url *url.URL) error {
+	ok, err := w.filterChain.Test(url)
+	if err != nil {
+		return ErrCrawlForbidden
+	}
+	if !ok {
+		return ErrCrawlForbidden
+	}
+
 	headRes, err := w.fetcher.Head(url)
 	if err != nil {
 		return &RequestError{Err: err}

@@ -167,7 +167,22 @@ func main() {
 	fetcher := fetcher.NewDefaultFetcher(time.Duration(conf.Fetcher.TimeoutMs) * time.Millisecond)
 	fc := filter.NewFilterChain()
 	fc.Append(filter.NewRobotsFilter(fetcher, 64))
-	loop(logger, frontier, fetcher, fc)
+
+	processed := make(chan result, 32)
+	toProcess := make(chan resource, 32)
+
+	warcWriter := warc.NewWarcWriter("data/warc/")
+
+	worker := &Worker{
+		fetcher:     fetcher,
+		in:          toProcess,
+		out:         processed,
+		warcWriter:  warcWriter,
+		maxPageSize: 100 * 1024 * 1024,
+		filterChain: fc,
+	}
+	worker.runN(context.Background(), &wg, 512)
+	loop(logger, processed, toProcess, frontier)
 
 	wg.Wait()
 }
@@ -305,19 +320,16 @@ func openRocksDB(path string) (*grocksdb.DB, error) {
 	return grocksdb.OpenDb(getDbOpts(), path)
 }
 
-func loop(logger *zap.SugaredLogger, frontier frontier.Frontier, fet fetcher.Fetcher, filterChain *filter.FilterChain) {
-	var wg sync.WaitGroup
-
-	urls := make(chan resource, 128)
-	processed := make(chan result, 16)
+func loop(logger *zap.SugaredLogger, processed chan result, urls chan resource, frontier frontier.Frontier) {
 
 	go func() {
 		for r := range processed {
 			total.Inc()
 			if r.err != nil {
-				if r.err != nil {
+				if r.err != ErrCrawlForbidden {
 					logger.Errorf("Error processing url: %s - %s", r.url, r.err)
 				}
+
 				if _, isReqErr := r.err.(*RequestError); isReqErr {
 					frontier.MarkFailed(r.url)
 				} else {
@@ -328,16 +340,7 @@ func loop(logger *zap.SugaredLogger, frontier frontier.Frontier, fet fetcher.Fet
 
 			totalGood.Inc()
 			for _, u := range r.links {
-				ok, err := filterChain.Test(u)
-				if err != nil {
-					logger.Errorln(err.Error())
-					continue
-				}
-				if !ok {
-					continue
-				}
-
-				err = frontier.Put(u)
+				err := frontier.Put(u)
 				if err != nil {
 					logger.Errorln(err.Error())
 				}
@@ -345,17 +348,6 @@ func loop(logger *zap.SugaredLogger, frontier frontier.Frontier, fet fetcher.Fet
 			frontier.MarkSuccessful(r.url, r.ttr)
 		}
 	}()
-
-	warcWriter := warc.NewWarcWriter("data/warc/")
-
-	worker := &Worker{
-		fetcher:     fet,
-		in:          urls,
-		out:         processed,
-		warcWriter:  warcWriter,
-		maxPageSize: 100 * 1024 * 1024,
-	}
-	worker.runN(context.Background(), &wg, 512)
 
 	for {
 		url, accessAt, err := frontier.Get()

@@ -2,18 +2,17 @@ distributed:
   addr: ""
   bootstrap_node: ""
   batch_period: 15000
-  vnode_num: 16
-  succlist_length: 2
-  stabilize_interval: 15000
-  fixfingers_interval: 10000
+  checkkeys_period: 30000
+  dht:
+    vnode_num: 16
+    succlist_length: 2
+    stabilize_interval: 15000
+    fixfingers_interval: 10000
 
-frontier:
-  max_active: 512
-  politeness: 5
+politeness:
+  max_active_queues: 512
+  multiplier: 5
   session_budget: 5
-  seed: seed.txt
-
-fetcher:
   timeout: 3000
 
-scope: ^(?:https?:\/\/)?(?:\w+\.)*(google\.com|google\.[a-z]{2,}|g\.co)(?:\/|$)
+seed: seed.txt

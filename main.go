@@ -147,12 +147,12 @@ func main() {
 
 	var frontier frontier.Frontier
 	if conf.Distributed.Addr != "" {
-		frontier = makeDistributedFrontier(logger, makeFrontier(conf.Frontier), conf.Distributed)
+		frontier = makeDistributedFrontier(logger, makeFrontier(conf.Politeness), conf.Distributed)
 	} else {
-		frontier = makeFrontier(conf.Frontier)
+		frontier = makeFrontier(conf.Politeness)
 	}
 
-	urls, err := readSeed(conf.Frontier.Seed)
+	urls, err := readSeed(conf.Seed)
 	if err != nil {
 		logger.Errorf("Can't parse URL: %s", err.Error())
 	}
@@ -164,7 +164,7 @@ func main() {
 		}
 	}
 
-	fetcher := fetcher.NewDefaultFetcher(time.Duration(conf.Fetcher.TimeoutMs) * time.Millisecond)
+	fetcher := fetcher.NewDefaultFetcher(time.Duration(conf.Politeness.TimeoutMs) * time.Millisecond)
 	fc := filter.NewFilterChain()
 	fc.Append(filter.NewRobotsFilter(fetcher, 64), filter.NewRegexFilter(conf.CrawlScope))
 
@@ -253,7 +253,7 @@ func bootstrap(logger *zap.SugaredLogger, addr string, distributedFrontier *fron
 	}
 }
 
-func makeFrontier(conf FrontierConf) *frontier.BfFrontier {
+func makeFrontier(conf PolitenessConf) *frontier.BfFrontier {
 	qp, err := newPersistentQp("data/queues/")
 	if err != nil {
 		panic(err.Error())
@@ -276,8 +276,8 @@ func makeFrontier(conf FrontierConf) *frontier.BfFrontier {
 	if conf.DefaultSessionBudget > 0 {
 		opts = append(opts, frontier.WithSessionBudget(conf.DefaultSessionBudget))
 	}
-	if conf.Politeness > 0 {
-		opts = append(opts, frontier.WithPolitenessMultiplier(conf.Politeness))
+	if conf.Multiplier > 0 {
+		opts = append(opts, frontier.WithPolitenessMultiplier(conf.Multiplier))
 	}
 	if conf.MaxActiveQueues > 0 {
 		opts = append(opts, frontier.WithMaxActiveQueues(conf.MaxActiveQueues))

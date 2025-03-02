@@ -29,22 +29,18 @@ type DistributedConf struct {
 	Dht               DhtConf `koanf:"dht"`
 }
 
-type FrontierConf struct {
-	MaxActiveQueues      int    `koanf:"max_active"`
-	Politeness           int    `koanf:"politeness"`
-	DefaultSessionBudget int    `koanf:"session_budget"`
-	Seed                 string `koanf:"seed"`
-}
-
-type FetcherConf struct {
-	TimeoutMs int `koanf:"timeout"`
+type PolitenessConf struct {
+	MaxActiveQueues      int `koanf:"max_active_queues"`
+	Multiplier           int `koanf:"multiplier"`
+	DefaultSessionBudget int `koanf:"session_budget"`
+	TimeoutMs            int `koanf:"timeout"`
 }
 
 type Config struct {
 	Distributed DistributedConf `koanf:"distributed"`
-	Frontier    FrontierConf    `koanf:"frontier"`
-	Fetcher     FetcherConf     `koanf:"fetcher"`
+	Politeness  PolitenessConf  `koanf:"politeness"`
 	CrawlScope  string          `koanf:"scope"`
+	Seed        string          `koanf:"seed"`
 }
 
 func ReadConf() (*Config, error) {
@@ -77,7 +73,7 @@ func ParseFlags() *pflag.FlagSet {
 	f.String("conf", "config.yaml", "configuration file")
 	f.String("distributed.addr", "", "defines node address")
 	f.String("distributed.bootstrap_node", "", "node to bootstrap with")
-	f.String("frontier.seed", "", "seed list path")
+	f.String("seed", "", "seed list path")
 	f.String("scope", "", "crawl scope")
 
 	f.Parse(os.Args[1:])

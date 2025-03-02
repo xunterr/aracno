@@ -166,7 +166,7 @@ func main() {
 
 	fetcher := fetcher.NewDefaultFetcher(time.Duration(conf.Fetcher.TimeoutMs) * time.Millisecond)
 	fc := filter.NewFilterChain()
-	fc.Append(filter.NewRobotsFilter(fetcher, 64))
+	fc.Append(filter.NewRobotsFilter(fetcher, 64), filter.NewRegexFilter(conf.CrawlScope))
 
 	processed := make(chan result, 32)
 	toProcess := make(chan resource, 32)

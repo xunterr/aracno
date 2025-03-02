@@ -16,3 +16,4 @@ frontier:
 fetcher:
   timeout: 3000
 
+scope: ^(?:https?:\/\/)?(?:\w+\.)*(google\.com|google\.[a-z]{2,}|g\.co)(?:\/|$)

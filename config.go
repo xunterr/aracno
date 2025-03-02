@@ -44,6 +44,7 @@ type Config struct {
 	Distributed DistributedConf `koanf:"distributed"`
 	Frontier    FrontierConf    `koanf:"frontier"`
 	Fetcher     FetcherConf     `koanf:"fetcher"`
+	CrawlScope  string          `koanf:"scope"`
 }
 
 func ReadConf() (*Config, error) {
@@ -77,7 +78,7 @@ func ParseFlags() *pflag.FlagSet {
 	f.String("distributed.addr", "", "defines node address")
 	f.String("distributed.bootstrap_node", "", "node to bootstrap with")
 	f.String("frontier.seed", "", "seed list path")
-	f.String("fetcher.indexer", "", "indexer address")
+	f.String("scope", "", "crawl scope")
 
 	f.Parse(os.Args[1:])
 

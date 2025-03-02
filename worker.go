@@ -8,12 +8,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jimsmart/grobotstxt"
 	warcparser "github.com/slyrz/warc"
 	"github.com/xunterr/aracno/internal/fetcher"
 	"github.com/xunterr/aracno/internal/parser"
-	"github.com/xunterr/aracno/internal/storage"
-	"github.com/xunterr/aracno/internal/storage/inmem"
 	"github.com/xunterr/aracno/internal/warc"
 )
 
@@ -43,9 +40,6 @@ type Worker struct {
 	in  chan resource
 	out chan result
 
-	robotsCache *inmem.LruCache[string]
-	rcMu        sync.Mutex
-
 	warcWriter  *warc.WarcWriter
 	wwMu        sync.Mutex
 	maxPageSize int
@@ -69,7 +63,6 @@ func (w *Worker) run(ctx context.Context) {
 		select {
 		case r := <-w.in:
 			if err := w.filter(r.u); err != nil {
-				println(err.Error())
 				w.out <- result{
 					err: err,
 					url: r.u,
@@ -84,11 +77,6 @@ func (w *Worker) run(ctx context.Context) {
 }
 
 func (w *Worker) filter(url *url.URL) error {
-	can, err := w.canCrawl(url)
-	if err != nil || !can {
-		return ErrCrawlForbidden
-	}
-
 	headRes, err := w.fetcher.Head(url)
 	if err != nil {
 		return &RequestError{Err: err}
@@ -147,53 +135,6 @@ func (w *Worker) process(ctx context.Context, res resource) result {
 		ttr:   details.TTR,
 		links: pageInfo.Links,
 	}
-}
-
-func (w *Worker) canCrawl(res *url.URL) (bool, error) {
-	body, err := w.getRobots(res)
-	if err != nil {
-		return false, err
-	}
-
-	ok := grobotstxt.AgentAllowed(body, "GoBot/1.0", res.String())
-	return ok, nil
-}
-
-func (w *Worker) getRobots(url *url.URL) (string, error) {
-	w.rcMu.Lock()
-	body, err := w.robotsCache.Get(url.Hostname())
-	w.rcMu.Unlock()
-	if err == nil {
-		return body, nil
-	}
-
-	if err != storage.NoSuchKeyError {
-		return "", err
-	}
-
-	details, err := w.fetchRobots(url)
-	if err != nil {
-		return "", err
-	}
-
-	body = string(details.Body)
-
-	w.rcMu.Lock()
-	err = w.robotsCache.Put(url.Hostname(), body)
-	w.rcMu.Unlock()
-	if err != nil {
-		return "", err
-	}
-	return body, nil
-}
-
-func (w *Worker) fetchRobots(url *url.URL) (*fetcher.FetchDetails, error) {
-	robotsUrl := *url
-	robotsUrl.Path = "/robots.txt"
-	robotsUrl.RawQuery = ""
-	robotsUrl.Fragment = ""
-
-	return w.fetcher.Fetch(&robotsUrl)
 }
 
 func writeWarc(writer *warc.WarcWriter, url *url.URL, details *fetcher.FetchDetails) error {

@@ -20,6 +20,7 @@ import (
 	boom "github.com/tylertreat/BoomFilters"
 	"github.com/xunterr/aracno/internal/dht"
 	"github.com/xunterr/aracno/internal/fetcher"
+	"github.com/xunterr/aracno/internal/filter"
 	"github.com/xunterr/aracno/internal/frontier"
 	p2p "github.com/xunterr/aracno/internal/net"
 	"github.com/xunterr/aracno/internal/storage"
@@ -164,7 +165,9 @@ func main() {
 	}
 
 	fetcher := fetcher.NewDefaultFetcher(time.Duration(conf.Fetcher.TimeoutMs) * time.Millisecond)
-	loop(logger, frontier, fetcher)
+	fc := filter.NewFilterChain()
+	fc.Append(filter.NewRobotsFilter(fetcher, 64))
+	loop(logger, frontier, fetcher, fc)
 
 	wg.Wait()
 }
@@ -302,7 +305,7 @@ func openRocksDB(path string) (*grocksdb.DB, error) {
 	return grocksdb.OpenDb(getDbOpts(), path)
 }
 
-func loop(logger *zap.SugaredLogger, frontier frontier.Frontier, fet fetcher.Fetcher) {
+func loop(logger *zap.SugaredLogger, frontier frontier.Frontier, fet fetcher.Fetcher, filterChain *filter.FilterChain) {
 	var wg sync.WaitGroup
 
 	urls := make(chan resource, 128)
@@ -312,7 +315,7 @@ func loop(logger *zap.SugaredLogger, frontier frontier.Frontier, fet fetcher.Fet
 		for r := range processed {
 			total.Inc()
 			if r.err != nil {
-				if r.err != ErrCrawlForbidden {
+				if r.err != nil {
 					logger.Errorf("Error processing url: %s - %s", r.url, r.err)
 				}
 				if _, isReqErr := r.err.(*RequestError); isReqErr {
@@ -325,7 +328,16 @@ func loop(logger *zap.SugaredLogger, frontier frontier.Frontier, fet fetcher.Fet
 
 			totalGood.Inc()
 			for _, u := range r.links {
-				err := frontier.Put(u)
+				ok, err := filterChain.Test(u)
+				if err != nil {
+					logger.Errorln(err.Error())
+					continue
+				}
+				if !ok {
+					continue
+				}
+
+				err = frontier.Put(u)
 				if err != nil {
 					logger.Errorln(err.Error())
 				}
@@ -342,7 +354,6 @@ func loop(logger *zap.SugaredLogger, frontier frontier.Frontier, fet fetcher.Fet
 		out:         processed,
 		warcWriter:  warcWriter,
 		maxPageSize: 100 * 1024 * 1024,
-		robotsCache: inmem.NewLruCache[string](64),
 	}
 	worker.runN(context.Background(), &wg, 512)
 

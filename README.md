@@ -10,7 +10,7 @@ There are many web crawlers out there, but most either don't support distributed
 
 ## Quickstart
 In order to run Aracno you need:
-1. Install rocksdb - [Rocksdb installation guide](https://github.com/facebook/rocksdb/blob/main/INSTALL.md) (just `make static_lib` and `sudo make install`)
+1. Install rocksdb v9.8.5 - [Rocksdb installation guide](https://github.com/facebook/rocksdb/blob/main/INSTALL.md) (just `make static_lib` and `sudo make install`)
 2. Build: `go build`
 3. Run: `./aracno`
 

@@ -4,7 +4,4 @@ global:
 scrape_configs:
   - job_name: 'crawler'
     static_configs:
-      - targets: ['138.68.100.209:8080']
-  - job_name: node
-    static_configs:
-    - targets: ['138.68.100.209:9100']
+      - targets: ['localhost:8080']
